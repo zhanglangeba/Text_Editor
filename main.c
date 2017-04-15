@@ -6,27 +6,81 @@
 //  Copyright © 2017年 张狼. All rights reserved.
 //
 
+#include <ctype.h>
+#include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <errno.h>
 #include <termios.h>
+#include <unistd.h>
 
-void enableRawMode(){
-    struct termios raw;
-    tcgetattr(STDIN_FILENO, &raw);
-    
-    raw.c_lflag &= ~(ECHO);
-    
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+struct termios orig_termios;
+
+void die(const char *s)
+{
+    perror(s);
+    exit(1);
 }
 
-int main(int argc, const char * argv[]) {
+void disableRawMode()
+{
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
+    {
+        die("tcsetattr");
+    }
+}
+
+void enableRawMode()
+{
+    
+    if(tcgetattr(STDIN_FILENO, &orig_termios) == -1)
+    {
+        die("tcgetattr");
+    }
+    atexit(disableRawMode);
+    
+    struct termios raw = orig_termios;
+ //   tcgetattr(STDIN_FILENO, &raw);
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_cflag |= (CS8);
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+    
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
+    {
+        die("tcsetattr");
+    }
+}
+
+int main(int argc, const char * argv[])
+{
     // insert code here...
-    printf("Hello, World!\n");
+ //   printf("Hello, World!\n");
     
     enableRawMode();
     
-    char c;
-    while(read(STDIN_FILENO, &c, 1) == 1 && c != 'q');
+//    char c;
+    while(1)//read(STDIN_FILENO, &c, 1) == 1 && c != 'q')
+    {
+        char c = '\0';
+        if(read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN)
+        {
+            die("read");
+        }
+        if(iscntrl(c))
+        {
+            printf("%d\r\n", c);
+        }
+        else
+        {
+            printf("%d ('%c')\r\n", c, c);
+        }
+        if (c == 'q')
+        {
+            break;
+        }
+    }
     
     return 0;
 }
